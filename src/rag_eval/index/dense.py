@@ -17,6 +17,11 @@ from fastembed import TextEmbedding
 from rag_eval.data.scifact import Document
 from rag_eval.index.base import Hit, rank
 
+# Measured on the 809 training queries, not chosen by reputation:
+#   bge-small-en-v1.5   nDCG@10 0.7522 [0.7270, 0.7754]
+#   all-MiniLM-L6-v2    nDCG@10 0.6387 [0.6096, 0.6666]
+#   arctic-embed-s      nDCG@10 0.6002 [0.5711, 0.6278]
+# The intervals do not overlap, so the gap is real rather than noise.
 DEFAULT_MODEL = "BAAI/bge-small-en-v1.5"
 BATCH_SIZE = 256
 
