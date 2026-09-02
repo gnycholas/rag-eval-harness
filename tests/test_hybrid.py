@@ -47,7 +47,7 @@ def test_a_smaller_constant_weights_the_top_of_the_ranking_harder() -> None:
     """Why the constant mattered: 60 flattens the difference between rank 1
     and rank 10, which is most of the signal on a corpus with one relevant
     document per query."""
-    rankings = [ranking("a", "b"), ranking("b", "a")]
+    rankings = [ranking("a", "b"), ranking("a", "b")]
     tight = dict(fuse(rankings, k=1, top=2))
     loose = dict(fuse(rankings, k=1000, top=2))
     assert tight["a"] - tight["b"] > loose["a"] - loose["b"]
