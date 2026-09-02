@@ -6,7 +6,8 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 
-# Downloaded corpus, built indexes, model cache
-data/
-.cache/
+# Downloaded corpus, built indexes, model cache. Anchored to the root: a bare
+# data/ also swallows the src/rag_eval/data package.
+/data/
+/.cache/
 .env
