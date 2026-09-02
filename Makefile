@@ -31,8 +31,11 @@ test: $(VENV) ## Run the test suite
 
 check: lint typecheck test ## Everything CI runs
 
+data: $(VENV) ## Download and verify the SciFact dataset
+	$(PY) -m rag_eval.cli data
+
 clean: ## Remove build and cache artifacts
 	rm -rf $(VENV) .mypy_cache .pytest_cache .ruff_cache
 	find . -name __pycache__ -type d -prune -exec rm -rf {} +
 
-.PHONY: help install lint format typecheck test check clean
+.PHONY: help install lint format typecheck test check data clean

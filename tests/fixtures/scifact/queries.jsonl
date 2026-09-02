@@ -1,0 +1,8 @@
+{"_id": "1", "text": "0-dimensional biomaterials show inductive properties.", "metadata": {}}
+{"_id": "13", "text": "5% of perinatal mortality is due to low birth weight.", "metadata": {}}
+{"_id": "3", "text": "1,000 genomes project enables mapping of genetic sequence variation consisting of rare variants with larger penetrance effects than common variants.", "metadata": {"14717500": [{"sentences": [2, 5], "label": "SUPPORT"}, {"sentences": [7], "label": "SUPPORT"}]}}
+{"_id": "42", "text": "A high microerythrocyte count raises vulnerability to severe anemia in homozygous alpha (+)- thalassemia trait subjects.", "metadata": {"18174210": [{"sentences": [1, 9], "label": "CONTRADICT"}, {"sentences": [10], "label": "CONTRADICT"}]}}
+{"_id": "48", "text": "A total of 1,000 people in the UK are asymptomatic carriers of vCJD infection.", "metadata": {"13734012": [{"sentences": [4], "label": "CONTRADICT"}]}}
+{"_id": "49", "text": "ADAR1 binds to Dicer to cleave pre-miRNA.", "metadata": {"5953485": [{"sentences": [1], "label": "SUPPORT"}, {"sentences": [2], "label": "SUPPORT"}]}}
+{"_id": "5", "text": "1/2000 in UK have abnormal PrP positivity.", "metadata": {"13734012": [{"sentences": [4], "label": "SUPPORT"}]}}
+{"_id": "50", "text": "AIRE is expressed in some skin tumors.", "metadata": {"12580014": [{"sentences": [1], "label": "SUPPORT"}]}}
