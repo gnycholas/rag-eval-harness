@@ -122,3 +122,34 @@ def test_searching_an_unbuilt_dense_index_is_an_error() -> None:
 
     with pytest.raises(RuntimeError, match="has not been built"):
         DenseIndex().search("anything", k=5)
+
+
+def test_an_index_built_by_another_model_is_refused(tmp_path: Path) -> None:
+    """Loading one model's vectors and querying them with another's returns
+    confident nonsense and raises nothing."""
+    import numpy as np
+
+    from rag_eval.index.dense import DenseIndex
+
+    index = DenseIndex(model_name="model/a")
+    index.doc_ids = ["x"]
+    index._vectors = np.array([[1.0, 0.0]], dtype=np.float32)
+    path = tmp_path / "dense.npz"
+    index.save(path)
+
+    with pytest.raises(ValueError, match="built with 'model/a'"):
+        DenseIndex.load(path, expect_model="model/b")
+
+
+def test_loading_without_an_expectation_still_works(tmp_path: Path) -> None:
+    import numpy as np
+
+    from rag_eval.index.dense import DenseIndex
+
+    index = DenseIndex(model_name="model/a")
+    index.doc_ids = ["x"]
+    index._vectors = np.array([[1.0, 0.0]], dtype=np.float32)
+    path = tmp_path / "dense.npz"
+    index.save(path)
+
+    assert DenseIndex.load(path).model_name == "model/a"

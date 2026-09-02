@@ -17,12 +17,20 @@ from fastembed import TextEmbedding
 from rag_eval.data.scifact import Document
 from rag_eval.index.base import Hit, rank
 
-# Measured on the 809 training queries, not chosen by reputation:
+# Measured on the 809 training queries rather than chosen by reputation.
+# Quality, with intervals that do not overlap:
 #   bge-small-en-v1.5   nDCG@10 0.7522 [0.7270, 0.7754]
 #   all-MiniLM-L6-v2    nDCG@10 0.6387 [0.6096, 0.6666]
 #   arctic-embed-s      nDCG@10 0.6002 [0.5711, 0.6278]
-# The intervals do not overlap, so the gap is real rather than noise.
-DEFAULT_MODEL = "BAAI/bge-small-en-v1.5"
+# Throughput, measured head to head on the same 200 documents:
+#   all-MiniLM-L6-v2     11.8 ms/doc
+#   bge-small-en-v1.5   670.8 ms/doc
+# The default is the fast one: 0.11 nDCG costs a 57x longer first build,
+# about an hour against a minute, and an hour before anything appears is
+# how a repository ends up never being run. HIGH_QUALITY_MODEL is one flag
+# away and the README carries both numbers.
+DEFAULT_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
+HIGH_QUALITY_MODEL = "BAAI/bge-small-en-v1.5"
 BATCH_SIZE = 256
 
 log = logging.getLogger(__name__)
@@ -93,9 +101,16 @@ class DenseIndex:
         )
 
     @classmethod
-    def load(cls, path: Path) -> DenseIndex:
+    def load(cls, path: Path, *, expect_model: str | None = None) -> DenseIndex:
         stored = np.load(path, allow_pickle=False)
-        index = cls(model_name=str(stored["model"]))
+        model_name = str(stored["model"])
+
+        # Loading vectors built by one model and querying them with another
+        # returns confident nonsense and raises nothing.
+        if expect_model and model_name != expect_model:
+            raise ValueError(f"index was built with {model_name!r}, not {expect_model!r}")
+
+        index = cls(model_name=model_name)
         index.doc_ids = [str(x) for x in stored["doc_ids"]]
         index._vectors = stored["vectors"]
         return index

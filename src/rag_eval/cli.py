@@ -15,7 +15,7 @@ from rag_eval.evals.runner import evaluate
 from rag_eval.generate.provider import build_provider
 from rag_eval.generate.schema import PROMPT_VERSION
 from rag_eval.index.base import Index
-from rag_eval.index.dense import DenseIndex
+from rag_eval.index.dense import DEFAULT_MODEL, DenseIndex
 from rag_eval.index.hybrid import HybridIndex
 from rag_eval.index.sparse import Bm25Index
 
@@ -49,19 +49,28 @@ def _sparse(dataset: scifact.Dataset) -> Bm25Index:
     return index
 
 
-def _dense(dataset: scifact.Dataset, cfg: Config) -> DenseIndex:
-    """Embedding the corpus takes minutes, so it is cached on disk."""
-    cached = cfg.paths.index / f"dense-{dataset.documents[0].doc_id}.npz"
-    if cached.exists():
-        return DenseIndex.load(cached)
+def _dense(dataset: scifact.Dataset, cfg: Config, model: str | None = None) -> DenseIndex:
+    """Embedding the corpus takes minutes, so it is cached on disk.
 
-    index = DenseIndex()
+    The model name is part of the cache key. Without it, switching models
+    reloads the previous model's vectors and queries them with the new one's
+    embeddings, which returns confident nonsense and raises nothing.
+    """
+    name = model or DEFAULT_MODEL
+    slug = name.replace("/", "_")
+    cached = cfg.paths.index / f"dense-{slug}.npz"
+    if cached.exists():
+        return DenseIndex.load(cached, expect_model=name)
+
+    index = DenseIndex(model_name=name)
     index.build(dataset.documents)
     index.save(cached)
     return index
 
 
-def build_index(name: str, dataset: scifact.Dataset, cfg: Config) -> Index:
+def build_index(
+    name: str, dataset: scifact.Dataset, cfg: Config, model: str | None = None
+) -> Index:
     """Build only what was asked for.
 
     Asking for bm25 and paying for five thousand embeddings anyway is the kind
@@ -70,9 +79,9 @@ def build_index(name: str, dataset: scifact.Dataset, cfg: Config) -> Index:
     if name == "bm25":
         return _sparse(dataset)
     if name == "dense":
-        return _dense(dataset, cfg)
+        return _dense(dataset, cfg, model)
     if name == "hybrid":
-        return HybridIndex(sparse=_sparse(dataset), dense=_dense(dataset, cfg))
+        return HybridIndex(sparse=_sparse(dataset), dense=_dense(dataset, cfg, model))
     raise ValueError(f"unknown configuration: {name!r}")
 
 
@@ -81,7 +90,7 @@ def cmd_retrieval(args: argparse.Namespace) -> int:
     dataset = scifact.load(cfg.paths.dataset, split=args.split)
 
     for name in args.configs or list(CONFIGURATIONS):
-        report = evaluate(build_index(name, dataset, cfg), dataset)
+        report = evaluate(build_index(name, dataset, cfg, args.model), dataset)
         log.info("%s over %d queries", name, report.queries)
         print(f"\n### {name} ({args.split})\n{report.table()}")
     return 0
@@ -188,6 +197,7 @@ def build_parser() -> argparse.ArgumentParser:
     retrieval = sub.add_parser("retrieval", help="score the indexes against the qrels")
     retrieval.add_argument("--split", default="test", choices=["train", "test"])
     retrieval.add_argument("--configs", nargs="*", help="bm25, dense, hybrid")
+    retrieval.add_argument("--model", help="embedding model, defaults to the fast one")
 
     generation = sub.add_parser("generation", help="verify claims and score against human labels")
     generation.add_argument("--split", default="test", choices=["train", "test"])
