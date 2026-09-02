@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
+from datetime import UTC, datetime
 
 from rag_eval.config import Config, load_config
 from rag_eval.data import scifact
@@ -12,6 +13,7 @@ from rag_eval.evals import gate as gating
 from rag_eval.evals.pipeline import run as run_generation
 from rag_eval.evals.runner import evaluate
 from rag_eval.generate.provider import build_provider
+from rag_eval.generate.schema import PROMPT_VERSION
 from rag_eval.index.base import Index
 from rag_eval.index.dense import DenseIndex
 from rag_eval.index.hybrid import HybridIndex
@@ -152,6 +154,30 @@ def cmd_gate(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_baseline(args: argparse.Namespace) -> int:
+    """Record the current numbers as the line the gate compares against."""
+    cfg = load_config()
+    dataset = scifact.load(cfg.paths.dataset, split="test")
+    report = evaluate(build_index(args.config, dataset, cfg), dataset)
+
+    existing = gating.Baseline.load()
+    baseline = gating.Baseline(
+        retrieval={name: round(value.mean, 6) for name, value in report.metrics.items()},
+        generation=existing.generation if existing else {},
+        generation_stddev=existing.generation_stddev if existing else {},
+        provider=cfg.provider,
+        model=cfg.resolved_model(),
+        prompt_version=PROMPT_VERSION,
+        recorded_at=datetime.now(UTC).date().isoformat(),
+    )
+    baseline.save()
+
+    log.info("baseline written to %s over %d queries", gating.BASELINE_PATH, report.queries)
+    for name, value in baseline.retrieval.items():
+        log.info("  %s %.4f", name, value)
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="rag-eval")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -170,6 +196,9 @@ def build_parser() -> argparse.ArgumentParser:
     generation.add_argument("--limit", type=int, help="stop after this many queries")
     generation.add_argument("--yes", action="store_true", help="skip the cost confirmation")
 
+    baseline = sub.add_parser("baseline", help="record the current numbers as the baseline")
+    baseline.add_argument("--config", default="hybrid", choices=CONFIGURATIONS)
+
     sub.add_parser("gate", help="compare a run against the recorded baseline")
 
     return parser
@@ -182,6 +211,7 @@ def main(argv: list[str] | None = None) -> int:
         "data": cmd_data,
         "retrieval": cmd_retrieval,
         "generation": cmd_generation,
+        "baseline": cmd_baseline,
         "gate": cmd_gate,
     }
     return handlers[args.command](args)

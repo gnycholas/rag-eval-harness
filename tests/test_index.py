@@ -76,3 +76,49 @@ def test_k_limits_the_result(bm25: Bm25Index, documents: list[scifact.Document])
 def test_searching_before_building_is_an_error() -> None:
     with pytest.raises(RuntimeError, match="has not been built"):
         Bm25Index().search("anything", k=5)
+
+
+def test_dense_normalisation_makes_dot_product_cosine() -> None:
+    """Checked without loading a model, so the suite stays offline."""
+    import numpy as np
+
+    from rag_eval.index.dense import _normalize
+
+    vectors = np.array([[3.0, 4.0], [1.0, 0.0]], dtype=np.float32)
+    unit = _normalize(vectors)
+
+    assert np.allclose(np.linalg.norm(unit, axis=1), 1.0)
+    assert unit[0] @ unit[0] == pytest.approx(1.0)
+
+
+def test_dense_normalisation_survives_a_zero_vector() -> None:
+    import numpy as np
+
+    from rag_eval.index.dense import _normalize
+
+    assert not np.isnan(_normalize(np.zeros((1, 3), dtype=np.float32))).any()
+
+
+def test_a_dense_index_round_trips_through_disk(tmp_path: Path) -> None:
+    import numpy as np
+
+    from rag_eval.index.dense import DenseIndex
+
+    index = DenseIndex(model_name="pretend/model")
+    index.doc_ids = ["a", "b"]
+    index._vectors = np.array([[1.0, 0.0], [0.0, 1.0]], dtype=np.float32)
+
+    path = tmp_path / "dense.npz"
+    index.save(path)
+    restored = DenseIndex.load(path)
+
+    assert restored.doc_ids == ["a", "b"]
+    assert restored.model_name == "pretend/model"
+    assert restored.dimension == 2
+
+
+def test_searching_an_unbuilt_dense_index_is_an_error() -> None:
+    from rag_eval.index.dense import DenseIndex
+
+    with pytest.raises(RuntimeError, match="has not been built"):
+        DenseIndex().search("anything", k=5)
