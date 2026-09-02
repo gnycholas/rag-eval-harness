@@ -38,34 +38,50 @@ def cmd_data(args: argparse.Namespace) -> int:
     return 0
 
 
-def _indexes(dataset: scifact.Dataset, cfg: Config) -> dict[str, Index]:
-    sparse = Bm25Index()
-    sparse.build(dataset.documents)
+CONFIGURATIONS = ("bm25", "dense", "hybrid")
 
-    cached = cfg.paths.index / "dense.npz"
+
+def _sparse(dataset: scifact.Dataset) -> Bm25Index:
+    index = Bm25Index()
+    index.build(dataset.documents)
+    return index
+
+
+def _dense(dataset: scifact.Dataset, cfg: Config) -> DenseIndex:
+    """Embedding the corpus takes minutes, so it is cached on disk."""
+    cached = cfg.paths.index / f"dense-{dataset.documents[0].doc_id}.npz"
     if cached.exists():
-        dense = DenseIndex.load(cached)
-    else:
-        dense = DenseIndex()
-        dense.build(dataset.documents)
-        dense.save(cached)
+        return DenseIndex.load(cached)
 
-    return {
-        "bm25": sparse,
-        "dense": dense,
-        "hybrid": HybridIndex(sparse=sparse, dense=dense),
-    }
+    index = DenseIndex()
+    index.build(dataset.documents)
+    index.save(cached)
+    return index
+
+
+def build_index(name: str, dataset: scifact.Dataset, cfg: Config) -> Index:
+    """Build only what was asked for.
+
+    Asking for bm25 and paying for five thousand embeddings anyway is the kind
+    of waste that stops people from running the thing.
+    """
+    if name == "bm25":
+        return _sparse(dataset)
+    if name == "dense":
+        return _dense(dataset, cfg)
+    if name == "hybrid":
+        return HybridIndex(sparse=_sparse(dataset), dense=_dense(dataset, cfg))
+    raise ValueError(f"unknown configuration: {name!r}")
 
 
 def cmd_retrieval(args: argparse.Namespace) -> int:
     cfg = load_config()
     dataset = scifact.load(cfg.paths.dataset, split=args.split)
-    built = _indexes(dataset, cfg)
 
-    for name in args.configs or list(built):
-        report = evaluate(built[name], dataset)
+    for name in args.configs or list(CONFIGURATIONS):
+        report = evaluate(build_index(name, dataset, cfg), dataset)
         log.info("%s over %d queries", name, report.queries)
-        print(f"\n### {name}\n{report.table()}")
+        print(f"\n### {name} ({args.split})\n{report.table()}")
     return 0
 
 
@@ -85,10 +101,9 @@ def cmd_generation(args: argparse.Namespace) -> int:
         )
         return 1
 
-    built = _indexes(dataset, cfg)
     judge = build_provider(cfg) if args.judge else None
     report = run_generation(
-        built["hybrid"],
+        build_index("hybrid", dataset, cfg),
         dataset,
         provider,
         top_k=args.top_k,
@@ -124,8 +139,7 @@ def cmd_gate(args: argparse.Namespace) -> int:
 
     cfg = load_config()
     dataset = scifact.load(cfg.paths.dataset, split="test")
-    built = _indexes(dataset, cfg)
-    report = evaluate(built["hybrid"], dataset)
+    report = evaluate(build_index("hybrid", dataset, cfg), dataset)
     retrieval = {name: value.mean for name, value in report.metrics.items()}
 
     findings = gating.check(
