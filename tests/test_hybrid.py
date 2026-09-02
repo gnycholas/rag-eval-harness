@@ -54,3 +54,20 @@ def test_fusion_is_deterministic() -> None:
 
 def test_top_limits_the_result() -> None:
     assert len(fuse([ranking("a", "b", "c", "d")], top=2)) == 2
+
+
+def test_batch_search_matches_one_at_a_time() -> None:
+    """The fast path has to agree with the slow one, or it is a different index."""
+    from pathlib import Path
+
+    from rag_eval.data import scifact
+    from rag_eval.index.base import search_many
+    from rag_eval.index.sparse import Bm25Index
+
+    fixture = Path(__file__).parent / "fixtures" / "scifact"
+    dataset = scifact.load(fixture, check_counts=False)
+    index = Bm25Index()
+    index.build(dataset.documents)
+
+    claims = [q.text for q in dataset.queries]
+    assert search_many(index, claims, 5) == [index.search(c, 5) for c in claims]

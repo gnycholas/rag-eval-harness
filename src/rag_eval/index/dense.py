@@ -57,15 +57,29 @@ class DenseIndex:
         log.info("embedded %d documents into %d dimensions", len(documents), self.dimension)
 
     def search(self, query: str, k: int) -> list[Hit]:
+        return self.search_batch([query], k)[0]
+
+    def search_batch(self, queries: list[str], k: int) -> list[list[Hit]]:
+        """One embedding call for the whole batch.
+
+        Per-call overhead dominates otherwise: scoring a split one query at a
+        time took tens of minutes and made the harness impractical to run.
+        """
         if not self._vectors.size:
             raise RuntimeError("index has not been built")
 
-        embedded = np.asarray(list(self.model.embed([query])), dtype=np.float32)
-        similarity = self._vectors @ _normalize(embedded)[0]
+        embedded = np.asarray(
+            list(self.model.embed(queries, batch_size=BATCH_SIZE)), dtype=np.float32
+        )
+        similarity = self._vectors @ _normalize(embedded).T
+
         # Cosine runs to -1; shift so that rank()'s "drop non-positive" rule
         # does not silently discard the whole tail.
         shifted = (similarity + 1.0) / 2.0
-        return rank(dict(zip(self.doc_ids, shifted.tolist(), strict=True)), k)
+        return [
+            rank(dict(zip(self.doc_ids, shifted[:, column].tolist(), strict=True)), k)
+            for column in range(shifted.shape[1])
+        ]
 
     def save(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)

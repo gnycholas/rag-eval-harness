@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from rag_eval.index.base import Hit, Index, rank
+from rag_eval.index.base import Hit, Index, rank, search_many
 
 # The value the literature uses. It stays configurable because a constant
 # copied from a paper is not a measurement on this corpus.
@@ -34,9 +34,10 @@ class HybridIndex:
     def search(self, query: str, k: int) -> list[Hit]:
         """Fuse deeper than the cutoff, so a document ranked well by only one
         component still has a chance to surface."""
+        return self.search_batch([query], k)[0]
+
+    def search_batch(self, queries: list[str], k: int) -> list[list[Hit]]:
         depth = max(self.depth, k)
-        return fuse(
-            [self.sparse.search(query, depth), self.dense.search(query, depth)],
-            k=self.k,
-            top=k,
-        )
+        sparse = search_many(self.sparse, queries, depth)
+        dense = search_many(self.dense, queries, depth)
+        return [fuse([s, d], k=self.k, top=k) for s, d in zip(sparse, dense, strict=True)]

@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from rag_eval.data.scifact import Dataset
-from rag_eval.index.base import Index
+from rag_eval.index.base import Index, search_many
 from rag_eval.metrics.retrieval import (
     Interval,
     bootstrap,
@@ -47,10 +47,12 @@ def evaluate(index: Index, dataset: Dataset, *, depth: int = SEARCH_DEPTH) -> Re
     }
 
     judged = dataset.judged()
-    for query in judged:
+    rankings = search_many(index, [q.text for q in judged], depth)
+
+    for query, hits in zip(judged, rankings, strict=True):
         relevance = dataset.qrels[query.query_id]
         relevant = {doc_id for doc_id, score in relevance.items() if score > 0}
-        ranked = [doc_id for doc_id, _ in index.search(query.text, depth)]
+        ranked = [doc_id for doc_id, _ in hits]
 
         for k in RECALL_CUTOFFS:
             per_query[f"recall@{k}"].append(recall_at_k(ranked, relevant, k))
