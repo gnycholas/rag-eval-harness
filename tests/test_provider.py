@@ -255,7 +255,40 @@ def test_the_judge_can_run_on_another_model(monkeypatch: pytest.MonkeyPatch) -> 
     assert built.model == "gemini-b"
 
 
-def test_a_daily_quota_is_not_slept_on(monkeypatch: pytest.MonkeyPatch) -> None:
+def quota_body(quota_id: str, value: int, delay: str = "30s") -> dict:
+    return {
+        "error": {
+            "message": "quota",
+            "details": [
+                {
+                    "@type": "type.googleapis.com/google.rpc.QuotaFailure",
+                    "violations": [{"quotaId": quota_id, "quotaValue": str(value)}],
+                },
+                {"@type": "type.googleapis.com/google.rpc.RetryInfo", "retryDelay": delay},
+            ],
+        }
+    }
+
+
+def test_a_daily_quota_stops_the_run(monkeypatch: pytest.MonkeyPatch) -> None:
+    body = quota_body("GenerateRequestsPerDayPerProjectPerModel-FreeTier", 20)
+    provider = gemini(monkeypatch, [FakeResponse(429, body)])
+    with pytest.raises(prov.ProviderError, match="daily free tier quota of 20"):
+        provider.complete("s", "p", Verification)
+
+
+def test_a_stated_per_minute_quota_slows_the_client_down(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    body = quota_body("GenerateRequestsPerMinutePerProjectPerModel-FreeTier", 5, delay="2s")
+    provider = gemini(monkeypatch, [FakeResponse(429, body), FakeResponse(200, ok_body())])
+    provider.rpm = 15
+    provider._limit.rpm = 15
+    provider.complete("s", "p", Verification)
+    assert provider._limit.rpm == 5
+
+
+def test_a_long_delay_is_not_slept_on(monkeypatch: pytest.MonkeyPatch) -> None:
     body = {
         "error": {
             "message": "quota",
@@ -268,5 +301,5 @@ def test_a_daily_quota_is_not_slept_on(monkeypatch: pytest.MonkeyPatch) -> None:
         }
     }
     provider = gemini(monkeypatch, [FakeResponse(429, body)])
-    with pytest.raises(prov.ProviderError, match="daily quota"):
+    with pytest.raises(prov.ProviderError, match="longer than a retry makes sense"):
         provider.complete("s", "p", Verification)

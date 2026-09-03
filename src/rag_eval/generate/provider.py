@@ -218,6 +218,21 @@ def gemini_schema(schema: type[BaseModel]) -> dict[str, Any]:
     return convert(resolved)
 
 
+def quota_violation(body: dict[str, Any]) -> tuple[str, int] | None:
+    """The quota the API says was exceeded, and the value it holds.
+
+    The 429 states both, which beats guessing: the per minute allowance differs
+    by model and the per day one is not published at all.
+    """
+    for detail in body.get("error", {}).get("details", []):
+        for violation in detail.get("violations", []):
+            quota_id = violation.get("quotaId", "")
+            value = violation.get("quotaValue")
+            if quota_id and value is not None:
+                return quota_id, int(value)
+    return None
+
+
 def retry_delay(body: dict[str, Any]) -> float | None:
     """Seconds the API asked us to wait, when it said so."""
     for detail in body.get("error", {}).get("details", []):
@@ -302,11 +317,27 @@ class GeminiProvider:
 
             # The free tier answers a burst with a 429 carrying its own delay,
             # and the busier models answer with a 503 that clears on its own.
+            quota = quota_violation(body)
+            if quota and "PerDay" in quota[0]:
+                # Waiting this one out means waiting for the reset. Six retries
+                # against it is how the run wasted its last minutes.
+                raise ProviderError(
+                    f"{self.model} is out of its daily free tier quota of {quota[1]} requests"
+                )
+            if quota and "PerMinute" in quota[0] and quota[1] < self._limit.rpm:
+                log.warning(
+                    "%s allows %d requests per minute, not %d; slowing down",
+                    self.model,
+                    quota[1],
+                    self._limit.rpm,
+                )
+                self._limit.rpm = quota[1]
+
             asked = retry_delay(body)
             if asked is not None and asked > MAX_RETRY_DELAY:
                 raise ProviderError(
-                    f"{self.model} asked for {asked:.0f}s before the next call, which is the "
-                    f"daily quota rather than the per minute one: {last}"
+                    f"{self.model} asked for {asked:.0f}s before the next call, which is longer "
+                    f"than a retry makes sense: {last}"
                 )
 
             delay = asked or min(2**attempt, 60) + random.uniform(0, 1)
