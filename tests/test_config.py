@@ -32,8 +32,13 @@ def test_each_provider_has_its_own_default_model() -> None:
     assert config(GOOGLE).resolved_model().startswith("gemini-")
 
 
-def test_the_judge_falls_back_to_the_model_under_test() -> None:
-    assert config(GOOGLE).resolved_judge_model() == config(GOOGLE).resolved_model()
+def test_the_judge_does_not_grade_its_own_answers() -> None:
+    cfg = config(GOOGLE)
+    assert cfg.resolved_judge_model() != cfg.resolved_model()
+
+
+def test_a_provider_without_a_second_model_falls_back() -> None:
+    assert config(OLLAMA).resolved_judge_model() == config(OLLAMA).resolved_model()
 
 
 def test_a_judge_model_can_differ_from_the_model_under_test() -> None:

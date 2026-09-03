@@ -19,6 +19,9 @@ PROVIDERS = (STUB, OLLAMA, ANTHROPIC, GOOGLE)
 DEFAULT_ANTHROPIC_MODEL = "claude-opus-5"
 DEFAULT_OLLAMA_MODEL = "qwen2.5:7b"
 DEFAULT_GOOGLE_MODEL = "gemini-3.1-flash-lite"
+# A judge should not be the model it is grading. Kept in the same family so the
+# comparison is about the model and not about the vendor.
+DEFAULT_GOOGLE_JUDGE_MODEL = "gemini-3-flash-preview"
 
 # Free tier quota, per model and per minute, measured against the API rather
 # than read off a page: the 429 names it as 15 for this model.
@@ -49,6 +52,8 @@ DEFAULT_MODELS = {
     GOOGLE: DEFAULT_GOOGLE_MODEL,
 }
 
+DEFAULT_JUDGE_MODELS = {GOOGLE: DEFAULT_GOOGLE_JUDGE_MODEL}
+
 
 @dataclass(frozen=True)
 class Config:
@@ -63,13 +68,16 @@ class Config:
         return self.model or DEFAULT_MODELS[self.provider]
 
     def resolved_judge_model(self) -> str:
-        """The judge defaults to the model under test, which is worth avoiding.
+        """A judge should not be grading its own answers.
 
-        A model grading its own answers rates them generously, and on a free
-        tier the quota is counted per model, so a second model also doubles the
-        throughput of a run that uses both.
+        A model asked to score what it just produced rates it generously, so
+        the judge runs on a second model where there is one to run on. The
+        stub and Ollama fall back to the model under test, since there is
+        nothing to gain from a second local model.
         """
-        return self.judge_model or self.resolved_model()
+        if self.judge_model:
+            return self.judge_model
+        return DEFAULT_JUDGE_MODELS.get(self.provider) or self.resolved_model()
 
 
 ENV_FILE = Path(".env")

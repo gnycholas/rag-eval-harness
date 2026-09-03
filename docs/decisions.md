@@ -130,4 +130,5 @@ grade its own answer rates it generously, and an agreement figure produced that
 way measures a preference rather than a capability.
 
 On a free tier it also happens to be faster, since the quota is counted per
-model, but that is a side effect and not the reason.
+model and the two calls per claim then never wait on each other, but that is a
+side effect and not the reason.
