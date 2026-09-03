@@ -63,7 +63,7 @@ Against the two components it is built from, on the same 300 queries:
 
 | configuration | ndcg@10 | recall@10 | delta ndcg@10 vs best | seconds |
 |---|---|---|---|---|
-| hybrid k=1 depth=100 | 0.6937 [0.6535, 0.7347] | 0.8503 [0.8110, 0.8870] | best | 7 |
+| hybrid k=1 depth=100 | 0.6937 [0.6535, 0.7347] | 0.8503 [0.8110, 0.8870] | best | 8 |
 | bm25 | 0.6622 [0.6172, 0.7080] | 0.7843 [0.7368, 0.8286] | -0.0315 [-0.0541, -0.0089] | 3 |
 | dense | 0.6239 [0.5791, 0.6703] | 0.7743 [0.7273, 0.8160] | -0.0698 [-0.0992, -0.0428] | 5 |
 
@@ -79,18 +79,18 @@ the test split.
 
 | configuration | ndcg@10 | recall@10 | delta ndcg@10 vs best | seconds |
 |---|---|---|---|---|
-| hybrid k=1 depth=200 | 0.7095 [0.6841, 0.7342] | 0.8436 [0.8190, 0.8674] | best | 27 |
-| hybrid k=1 depth=100 | 0.7092 [0.6834, 0.7342] | 0.8436 [0.8190, 0.8674] | -0.0003 [-0.0017, 0.0011] (inconclusive) | 22 |
-| hybrid k=0 depth=100 | 0.7091 [0.6833, 0.7348] | 0.8436 [0.8190, 0.8674] | -0.0004 [-0.0035, 0.0028] (inconclusive) | 20 |
-| hybrid k=1 depth=50 | 0.7089 [0.6830, 0.7339] | 0.8425 [0.8185, 0.8666] | -0.0006 [-0.0021, 0.0008] (inconclusive) | 25 |
-| hybrid k=2 depth=100 | 0.7087 [0.6826, 0.7337] | 0.8442 [0.8195, 0.8684] | -0.0008 [-0.0046, 0.0028] (inconclusive) | 22 |
-| hybrid k=1 depth=10 | 0.7072 [0.6804, 0.7327] | 0.8398 [0.8163, 0.8642] | -0.0023 [-0.0054, 0.0006] (inconclusive) | 20 |
-| hybrid k=1 depth=20 | 0.7072 [0.6804, 0.7327] | 0.8398 [0.8163, 0.8642] | -0.0023 [-0.0054, 0.0006] (inconclusive) | 22 |
-| hybrid k=5 depth=100 | 0.7033 [0.6768, 0.7283] | 0.8428 [0.8185, 0.8668] | -0.0062 [-0.0126, -0.0000] | 21 |
-| hybrid k=10 depth=100 | 0.6983 [0.6707, 0.7227] | 0.8402 [0.8146, 0.8632] | -0.0112 [-0.0196, -0.0033] | 22 |
-| hybrid k=60 depth=100 | 0.6765 [0.6491, 0.7016] | 0.7991 [0.7724, 0.8224] | -0.0330 [-0.0445, -0.0222] | 22 |
-| bm25 | 0.6670 [0.6386, 0.6945] | 0.7884 [0.7597, 0.8162] | -0.0426 [-0.0570, -0.0273] | 8 |
-| dense | 0.6387 [0.6096, 0.6666] | 0.7668 [0.7375, 0.7940] | -0.0709 [-0.0893, -0.0551] | 11 |
+| hybrid k=1 depth=200 | 0.7095 [0.6841, 0.7342] | 0.8436 [0.8190, 0.8674] | best | 25 |
+| hybrid k=1 depth=100 | 0.7092 [0.6834, 0.7342] | 0.8436 [0.8190, 0.8674] | -0.0003 [-0.0017, 0.0011] (inconclusive) | 24 |
+| hybrid k=0 depth=100 | 0.7091 [0.6833, 0.7348] | 0.8436 [0.8190, 0.8674] | -0.0004 [-0.0035, 0.0028] (inconclusive) | 29 |
+| hybrid k=1 depth=50 | 0.7089 [0.6830, 0.7339] | 0.8425 [0.8185, 0.8666] | -0.0006 [-0.0021, 0.0008] (inconclusive) | 22 |
+| hybrid k=2 depth=100 | 0.7087 [0.6826, 0.7337] | 0.8442 [0.8195, 0.8684] | -0.0008 [-0.0046, 0.0028] (inconclusive) | 24 |
+| hybrid k=1 depth=10 | 0.7072 [0.6804, 0.7327] | 0.8398 [0.8163, 0.8642] | -0.0023 [-0.0054, 0.0006] (inconclusive) | 22 |
+| hybrid k=1 depth=20 | 0.7072 [0.6804, 0.7327] | 0.8398 [0.8163, 0.8642] | -0.0023 [-0.0054, 0.0006] (inconclusive) | 21 |
+| hybrid k=5 depth=100 | 0.7033 [0.6768, 0.7283] | 0.8428 [0.8185, 0.8668] | -0.0062 [-0.0126, -0.0000] | 27 |
+| hybrid k=10 depth=100 | 0.6983 [0.6707, 0.7227] | 0.8402 [0.8146, 0.8632] | -0.0112 [-0.0196, -0.0033] | 25 |
+| hybrid k=60 depth=100 | 0.6765 [0.6491, 0.7016] | 0.7991 [0.7724, 0.8224] | -0.0330 [-0.0445, -0.0222] | 26 |
+| bm25 | 0.6670 [0.6386, 0.6945] | 0.7884 [0.7597, 0.8162] | -0.0426 [-0.0570, -0.0273] | 13 |
+| dense | 0.6387 [0.6096, 0.6666] | 0.7668 [0.7375, 0.7940] | -0.0709 [-0.0893, -0.0551] | 20 |
 
 The last column is the interval of the per query difference against the best
 row, not a comparison of two separate intervals. Both configurations are scored
@@ -181,11 +181,24 @@ One full pass over the labelled claims is 376 calls, 188 to the verifier and
 took 29 minutes.
 
 On the Gemini free tier that is zero dollars and the cost is the quota
-instead. The allowance is per model and per minute, 15 for the verifier, so
-the client paces itself to that rather than earning a retry delay of most of a
-minute. The allowance is not published, and it is not uniform:
-`gemini-3-flash-preview` turned out to allow twenty requests a day, which is a
-thing you learn 80 percent of the way through a pass.
+instead. None of these allowances are published any more, and they are not
+uniform. Measured against the API rather than read off a page, by reading what
+the 429 states:
+
+| model | allowance |
+|---|---|
+| gemini-3.1-flash-lite | 15 per minute, 500 per day |
+| gemini-3.5-flash-lite | 15 per minute |
+| gemini-3-flash-preview | 20 per day |
+
+The client paces itself to the per minute figure rather than earning a retry
+delay of most of a minute, and lowers its own rate when a 429 names a smaller
+one. A daily allowance that is gone ends the run with that number in the
+message instead of sleeping until the reset.
+
+Five repeated runs need 940 requests against a daily 500, which is why the
+runs behind the variance figure are accumulated across days rather than
+computed in one pass.
 
 The Anthropic path is implemented and has not been run, so no dollar figure
 for it is published here. The token counts above are what a reader would
