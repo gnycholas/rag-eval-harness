@@ -35,6 +35,11 @@ GOOGLE_KEY_VARIABLE = "GOOGLE_GENAI_API_KEY"
 GOOGLE_TIMEOUT = 180
 GOOGLE_ATTEMPTS = 6
 
+# A per minute quota asks for at most a minute. A delay far past that is the
+# daily quota, and sleeping on it would hang the run until the reset instead of
+# saying what happened.
+MAX_RETRY_DELAY = 120
+
 # Keys the response schema accepts. Gemini takes a subset of OpenAPI, and the
 # title and default that pydantic emits are enough for a 400.
 SCHEMA_KEYS = ("type", "description", "enum", "items", "properties", "required", "nullable")
@@ -297,7 +302,14 @@ class GeminiProvider:
 
             # The free tier answers a burst with a 429 carrying its own delay,
             # and the busier models answer with a 503 that clears on its own.
-            delay = retry_delay(body) or min(2**attempt, 60) + random.uniform(0, 1)
+            asked = retry_delay(body)
+            if asked is not None and asked > MAX_RETRY_DELAY:
+                raise ProviderError(
+                    f"{self.model} asked for {asked:.0f}s before the next call, which is the "
+                    f"daily quota rather than the per minute one: {last}"
+                )
+
+            delay = asked or min(2**attempt, 60) + random.uniform(0, 1)
             log.warning(
                 "%s returned %d, waiting %.0fs (attempt %d/%d)",
                 self.model,

@@ -253,3 +253,20 @@ def test_the_judge_can_run_on_another_model(monkeypatch: pytest.MonkeyPatch) -> 
     monkeypatch.setenv(prov.GOOGLE_KEY_VARIABLE, "test-key")
     built = prov.build_provider(config(prov.GOOGLE, model="gemini-a"), model="gemini-b")
     assert built.model == "gemini-b"
+
+
+def test_a_daily_quota_is_not_slept_on(monkeypatch: pytest.MonkeyPatch) -> None:
+    body = {
+        "error": {
+            "message": "quota",
+            "details": [
+                {
+                    "@type": "type.googleapis.com/google.rpc.RetryInfo",
+                    "retryDelay": f"{prov.MAX_RETRY_DELAY + 1}s",
+                }
+            ],
+        }
+    }
+    provider = gemini(monkeypatch, [FakeResponse(429, body)])
+    with pytest.raises(prov.ProviderError, match="daily quota"):
+        provider.complete("s", "p", Verification)

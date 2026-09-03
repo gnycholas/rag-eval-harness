@@ -6,6 +6,7 @@ import argparse
 import logging
 import sys
 from datetime import UTC, datetime
+from statistics import mean, stdev
 
 from rag_eval.config import Config, load_config
 from rag_eval.data import scifact
@@ -231,14 +232,19 @@ def cmd_baseline(args: argparse.Namespace) -> int:
     """Record the current numbers as the line the gate compares against."""
     cfg = load_config()
     dataset = scifact.load(cfg.paths.dataset, split="test")
-    report = evaluate(build_index(args.config, dataset, cfg, args.model), dataset)
-
     existing = gating.Baseline.load()
+
+    generation = existing.generation if existing else {}
+    generation_stddev = existing.generation_stddev if existing else {}
+    if args.generation:
+        generation, generation_stddev = _measure_generation(cfg, dataset, args)
+
+    report = evaluate(build_index(args.config, dataset, cfg, args.model), dataset)
     baseline = gating.Baseline(
         retrieval={name: round(value.mean, 6) for name, value in report.metrics.items()},
         retrieval_config=retrieval_config(args.config, args.model),
-        generation=existing.generation if existing else {},
-        generation_stddev=existing.generation_stddev if existing else {},
+        generation=generation,
+        generation_stddev=generation_stddev,
         provider=cfg.provider,
         model=cfg.resolved_model(),
         prompt_version=PROMPT_VERSION,
@@ -249,7 +255,40 @@ def cmd_baseline(args: argparse.Namespace) -> int:
     log.info("baseline written to %s over %d queries", gating.BASELINE_PATH, report.queries)
     for name, value in baseline.retrieval.items():
         log.info("  %s %.4f", name, value)
+    for name, value in baseline.generation.items():
+        log.info("  %s %.4f (sd %.4f)", name, value, baseline.generation_stddev.get(name, 0.0))
     return 0
+
+
+def _measure_generation(
+    cfg: Config, dataset: scifact.Dataset, args: argparse.Namespace
+) -> tuple[dict[str, float], dict[str, float]]:
+    """Run the generation eval repeatedly and keep the spread.
+
+    One run gives a number with no idea how much of it is the model and how
+    much is the sampling. The gate needs the spread more than it needs the
+    number: without it there is no honest band and generation cannot block.
+    """
+    provider = build_provider(cfg)
+    index = build_index("hybrid", dataset, cfg)
+
+    runs: dict[str, list[float]] = {"accuracy": [], "faithful_citations": []}
+    for attempt in range(1, args.repeat + 1):
+        report = run_generation(index, dataset, provider, top_k=args.top_k, limit=args.limit)
+        runs["accuracy"].append(report.model_agreement.accuracy.mean)
+        runs["faithful_citations"].append(report.faithful_rate)
+        log.info(
+            "run %d/%d: accuracy %.4f, faithful %.4f",
+            attempt,
+            args.repeat,
+            runs["accuracy"][-1],
+            runs["faithful_citations"][-1],
+        )
+
+    means = {name: round(mean(values), 6) for name, values in runs.items()}
+    if args.repeat < 2:
+        return means, {}
+    return means, {name: round(stdev(values), 6) for name, values in runs.items()}
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -280,6 +319,14 @@ def build_parser() -> argparse.ArgumentParser:
     baseline = sub.add_parser("baseline", help="record the current numbers as the baseline")
     baseline.add_argument("--config", default="hybrid", choices=CONFIGURATIONS)
     baseline.add_argument("--model", help="embedding model, defaults to the fast one")
+    baseline.add_argument(
+        "--generation", action="store_true", help="also measure the generation metrics"
+    )
+    baseline.add_argument(
+        "--repeat", type=int, default=5, help="runs to average, and to take the spread from"
+    )
+    baseline.add_argument("--top-k", type=int, default=5)
+    baseline.add_argument("--limit", type=int, help="claims per run, for a cheaper measurement")
 
     sub.add_parser("gate", help="compare a run against the recorded baseline")
 
