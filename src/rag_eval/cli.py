@@ -183,6 +183,7 @@ def cmd_generation(args: argparse.Namespace) -> int:
     print(f"kappa      {agreement.kappa:.4f} ({agreement.kappa_reading})")
     print(f"faithful citations {report.faithful_rate:.4f}")
     print(f"failures   {report.failures}")
+    print(f"unusable   {report.unusable}")
     print(f"\n{agreement.confusion_table()}")
 
     if report.judge_agreement and judge is not None:

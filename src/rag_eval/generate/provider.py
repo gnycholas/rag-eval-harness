@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol, TypeVar
 
 import requests
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from rag_eval.config import ANTHROPIC, DEFAULT_RPM, GOOGLE, OLLAMA, STUB, Config
 from rag_eval.data.scifact import CONTRADICT, NOINFO, SUPPORT
@@ -46,7 +46,17 @@ SCHEMA_KEYS = ("type", "description", "enum", "items", "properties", "required",
 
 
 class ProviderError(RuntimeError):
-    """The provider cannot run."""
+    """The provider cannot run. Whatever raises this ends the run."""
+
+
+class ResponseError(ProviderError):
+    """One answer came back unusable.
+
+    Separate from the errors that end a run, because an eval that throws away
+    an expensive pass over the dataset when one response in two hundred is
+    malformed is a bad eval. The count of these is a property of the model and
+    gets reported next to its scores.
+    """
 
 
 @dataclass(frozen=True)
@@ -270,7 +280,7 @@ class GeminiProvider:
         candidates = body.get("candidates") or []
         if not candidates:
             blocked = body.get("promptFeedback", {}).get("blockReason")
-            raise ProviderError(f"no candidate returned (blockReason={blocked})")
+            raise ResponseError(f"no candidate returned (blockReason={blocked})")
 
         candidate = candidates[0]
         # SAFETY, RECITATION and the rest mean the model stopped for its own
@@ -278,7 +288,7 @@ class GeminiProvider:
         # one and quietly depress the score.
         reason = candidate.get("finishReason")
         if reason not in (None, "STOP"):
-            raise ProviderError(f"the model stopped early (finishReason={reason})")
+            raise ResponseError(f"the model stopped early (finishReason={reason})")
 
         text = "".join(
             part["text"]
@@ -286,14 +296,21 @@ class GeminiProvider:
             if "text" in part and not part.get("thought")
         )
         if not text.strip():
-            raise ProviderError("empty response")
+            raise ResponseError("empty response")
 
         usage_metadata = body.get("usageMetadata", {})
         usage = Usage(
             input_tokens=int(usage_metadata.get("promptTokenCount", 0)),
             output_tokens=int(usage_metadata.get("candidatesTokenCount", 0)),
         )
-        return schema.model_validate(json.loads(text)), usage
+        # Not every model honours the response schema. One that answers with a
+        # second object after the first is unusable for this claim, and saying
+        # so beats a JSONDecodeError from four frames down.
+        try:
+            parsed = schema.model_validate(json.loads(text))
+        except (json.JSONDecodeError, ValidationError) as exc:
+            raise ResponseError(f"{self.model} did not answer in the schema: {exc}") from exc
+        return parsed, usage
 
     def _post(self, payload: dict[str, Any]) -> dict[str, Any]:
         url = GOOGLE_ENDPOINT.format(model=self.model)

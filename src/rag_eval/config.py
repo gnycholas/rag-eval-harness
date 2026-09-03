@@ -19,10 +19,11 @@ PROVIDERS = (STUB, OLLAMA, ANTHROPIC, GOOGLE)
 DEFAULT_ANTHROPIC_MODEL = "claude-opus-5"
 DEFAULT_OLLAMA_MODEL = "qwen2.5:7b"
 DEFAULT_GOOGLE_MODEL = "gemini-3.1-flash-lite"
-# A judge should not be the model it is grading. This one is also the only
-# choice on the free tier that can see the whole set: gemini-3-flash-preview
-# allows twenty requests a day, which does not reach 188 claims.
-DEFAULT_GOOGLE_JUDGE_MODEL = "gemma-4-31b-it"
+# A judge should not be the model it is grading, and on this tier the choice is
+# narrow: gemini-3-flash-preview allows twenty requests a day, and Gemma ignores
+# the response schema often enough to waste the quota. A different model with
+# its own allowance is what is left.
+DEFAULT_GOOGLE_JUDGE_MODEL = "gemini-3.5-flash-lite"
 
 # Free tier quota, per model and per minute, measured against the API rather
 # than read off a page: the 429 names it as 15 for this model.
