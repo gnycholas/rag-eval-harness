@@ -32,8 +32,14 @@ the suite is decoration.
 
 The test split is 300 queries. A one point difference between configurations is
 often noise, and reporting the mean alone is how a portfolio ends up claiming a
-gain that is not there. Ablations mark a comparison as inconclusive when the
-intervals overlap rather than picking the larger number.
+gain that is not there. Every number carries a bootstrap interval, and the
+ablation marks a comparison as inconclusive rather than picking the larger mean.
+
+What decides that marking is the interval of the difference, not whether the two
+intervals overlap. Both configurations are scored on the same queries, so the
+difference can be bootstrapped per query. Reading two separate intervals throws
+that pairing away: they can overlap while every single query moved the same way,
+and a real improvement gets called a tie.
 
 ## Configuration is chosen on train, reported on test
 
@@ -95,16 +101,33 @@ The gate also refuses to compare a run against a baseline recorded on a
 different model. Running something cheap day to day and measuring it against an
 expensive baseline is the most tempting way to get a wrong answer here.
 
-## Three providers behind one interface
+## Four providers behind one interface
 
 A deterministic stub for the suite and CI, so tests need neither network nor
-API key and never go flaky. Ollama so a clone runs for free. Anthropic for the
-numbers that get published.
+API key and never go flaky. Ollama so a clone runs for free. Anthropic and
+Gemini for the numbers that get published.
 
 Every reported number carries which provider and model produced it. Comparing an
 Ollama run to an Opus run as though they were the same measurement would be
 exactly the sort of wrong number this repo is about.
 
+The published numbers here come from Gemini on the free tier, which shapes the
+run in two ways worth stating rather than hiding. The quota is 15 requests per
+minute per model, so a pass over the 188 labelled claims takes about thirteen
+minutes and no amount of concurrency changes that; the client paces itself
+instead of earning a 429 with a minute long delay attached. And free tier
+traffic may be used to improve the provider's models, which is acceptable here
+only because every prompt is built from a public benchmark.
+
 The subscription route through the Claude CLI is deliberately not offered here.
 A public repo invites strangers to run it, and the terms do not cover using a
 subscription as a product backend.
+
+## The judge does not grade its own work
+
+The verifier and the judge run on different models by default. A model asked to
+grade its own answer rates it generously, and an agreement figure produced that
+way measures a preference rather than a capability.
+
+On a free tier it also happens to be faster, since the quota is counted per
+model, but that is a side effect and not the reason.

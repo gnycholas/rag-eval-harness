@@ -13,9 +13,14 @@ from rag_eval.generate.schema import JudgeVerdict, Verification
 from rag_eval.generate.verify import build_prompt, normalize_verdict, verify
 
 
-def config(name: str) -> Config:
+def config(name: str, model: str = "") -> Config:
     return Config(
-        paths=Paths(root=Path("data")), provider=name, model="", ollama_host="http://nowhere:1"
+        paths=Paths(root=Path("data")),
+        provider=name,
+        model=model,
+        judge_model="",
+        ollama_host="http://nowhere:1",
+        rpm=0,
     )
 
 
@@ -117,3 +122,134 @@ def test_a_citation_out_of_range_is_recorded_not_dropped() -> None:
 
 def test_the_prompt_version_travels_with_the_result() -> None:
     assert verify(prov.StubProvider(), "q1", "c", passages()).prompt_version
+
+
+class FakeResponse:
+    def __init__(self, status: int, payload: dict) -> None:
+        self.status_code = status
+        self._payload = payload
+        self.content = b"x"
+        self.text = str(payload)
+
+    def json(self) -> dict:
+        return self._payload
+
+
+def ok_body(text: str = '{"verdict": "SUPPORT", "rationale": "r", "cited_indices": [1]}') -> dict:
+    return {
+        "candidates": [{"finishReason": "STOP", "content": {"parts": [{"text": text}]}}],
+        "usageMetadata": {"promptTokenCount": 11, "candidatesTokenCount": 7},
+    }
+
+
+def gemini(monkeypatch: pytest.MonkeyPatch, responses: list[FakeResponse]) -> prov.GeminiProvider:
+    monkeypatch.setenv(prov.GOOGLE_KEY_VARIABLE, "test-key")
+    monkeypatch.setattr(prov.time, "sleep", lambda _: None)
+    queue = list(responses)
+    monkeypatch.setattr(prov.requests, "post", lambda *a, **k: queue.pop(0))
+    return prov.GeminiProvider(model="gemini-test", rpm=0)
+
+
+def test_the_response_schema_drops_what_gemini_rejects() -> None:
+    schema = prov.gemini_schema(Verification)
+    assert set(schema) <= set(prov.SCHEMA_KEYS)
+    assert "title" not in schema["properties"]["verdict"]
+    assert schema["properties"]["cited_indices"]["items"]["type"] == "integer"
+    assert "verdict" in schema["required"]
+
+
+def test_a_missing_key_fails_at_construction(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv(prov.GOOGLE_KEY_VARIABLE, raising=False)
+    with pytest.raises(prov.ProviderError, match=prov.GOOGLE_KEY_VARIABLE):
+        prov.GeminiProvider(model="gemini-test")
+
+
+def test_a_completion_parses_and_carries_usage(monkeypatch: pytest.MonkeyPatch) -> None:
+    provider = gemini(monkeypatch, [FakeResponse(200, ok_body())])
+    parsed, usage = provider.complete("sys", "prompt", Verification)
+    assert parsed.verdict == "SUPPORT"
+    assert (usage.input_tokens, usage.output_tokens) == (11, 7)
+
+
+def test_thoughts_are_not_part_of_the_answer(monkeypatch: pytest.MonkeyPatch) -> None:
+    body = ok_body()
+    body["candidates"][0]["content"]["parts"].insert(0, {"text": "thinking", "thought": True})
+    provider = gemini(monkeypatch, [FakeResponse(200, body)])
+    parsed, _ = provider.complete("sys", "prompt", Verification)
+    assert parsed.verdict == "SUPPORT"
+
+
+def test_stopping_for_its_own_reasons_is_an_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    body = {"candidates": [{"finishReason": "SAFETY", "content": {"parts": []}}]}
+    provider = gemini(monkeypatch, [FakeResponse(200, body)])
+    with pytest.raises(prov.ProviderError, match="SAFETY"):
+        provider.complete("sys", "prompt", Verification)
+
+
+def test_a_blocked_prompt_is_an_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    provider = gemini(
+        monkeypatch, [FakeResponse(200, {"promptFeedback": {"blockReason": "OTHER"}})]
+    )
+    with pytest.raises(prov.ProviderError, match="OTHER"):
+        provider.complete("sys", "prompt", Verification)
+
+
+def test_a_quota_error_is_retried_with_the_delay_it_asked_for(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    quota = {
+        "error": {
+            "message": "quota",
+            "details": [{"@type": "type.googleapis.com/google.rpc.RetryInfo", "retryDelay": "47s"}],
+        }
+    }
+    slept: list[float] = []
+    monkeypatch.setenv(prov.GOOGLE_KEY_VARIABLE, "test-key")
+    monkeypatch.setattr(prov.time, "sleep", slept.append)
+    queue = [FakeResponse(429, quota), FakeResponse(200, ok_body())]
+    monkeypatch.setattr(prov.requests, "post", lambda *a, **k: queue.pop(0))
+
+    parsed, _ = prov.GeminiProvider(model="gemini-test", rpm=0).complete("s", "p", Verification)
+    assert parsed.verdict == "SUPPORT"
+    assert slept == [47.0]
+
+
+def test_a_busy_model_is_retried_without_a_stated_delay(monkeypatch: pytest.MonkeyPatch) -> None:
+    provider = gemini(
+        monkeypatch,
+        [FakeResponse(503, {"error": {"message": "high demand"}}), FakeResponse(200, ok_body())],
+    )
+    parsed, _ = provider.complete("s", "p", Verification)
+    assert parsed.verdict == "SUPPORT"
+
+
+def test_a_rejected_request_is_not_retried(monkeypatch: pytest.MonkeyPatch) -> None:
+    provider = gemini(monkeypatch, [FakeResponse(400, {"error": {"message": "bad schema"}})])
+    with pytest.raises(prov.ProviderError, match="bad schema"):
+        provider.complete("s", "p", Verification)
+
+
+def test_giving_up_says_how_many_attempts(monkeypatch: pytest.MonkeyPatch) -> None:
+    busy = [FakeResponse(503, {"error": {"message": "busy"}}) for _ in range(prov.GOOGLE_ATTEMPTS)]
+    provider = gemini(monkeypatch, busy)
+    with pytest.raises(prov.ProviderError, match=str(prov.GOOGLE_ATTEMPTS)):
+        provider.complete("s", "p", Verification)
+
+
+def test_the_rate_limit_spaces_calls_out(monkeypatch: pytest.MonkeyPatch) -> None:
+    slept: list[float] = []
+    monkeypatch.setattr(prov.time, "sleep", slept.append)
+    limit = prov.RateLimit(rpm=60)
+    limit.wait()
+    limit.wait()
+    assert slept and 0.9 < slept[-1] <= 1.0
+
+
+def test_no_rate_limit_when_it_is_switched_off() -> None:
+    prov.RateLimit(rpm=0).wait()
+
+
+def test_the_judge_can_run_on_another_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv(prov.GOOGLE_KEY_VARIABLE, "test-key")
+    built = prov.build_provider(config(prov.GOOGLE, model="gemini-a"), model="gemini-b")
+    assert built.model == "gemini-b"
