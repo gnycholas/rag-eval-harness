@@ -21,6 +21,10 @@ from rag_eval.index.base import Hit, Index, rank, search_many
 # have led to the wrong conclusion about hybrid retrieval on this corpus.
 DEFAULT_K = 1
 
+# How deep each component ranking goes before fusion. Measured the same way as
+# the constant above.
+DEFAULT_DEPTH = 100
+
 
 def fuse(rankings: list[list[Hit]], *, k: int = DEFAULT_K, top: int = 10) -> list[Hit]:
     scores: dict[str, float] = {}
@@ -35,7 +39,7 @@ class HybridIndex:
     sparse: Index
     dense: Index
     k: int = DEFAULT_K
-    depth: int = 100
+    depth: int = DEFAULT_DEPTH
 
     def search(self, query: str, k: int) -> list[Hit]:
         """Fuse deeper than the cutoff, so a document ranked well by only one

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from rag_eval.data.scifact import Dataset
 from rag_eval.index.base import Index, search_many
@@ -24,6 +24,10 @@ SEARCH_DEPTH = max(max(RECALL_CUTOFFS), NDCG_CUTOFF, MRR_CUTOFF)
 class RetrievalReport:
     metrics: dict[str, Interval]
     queries: int
+    # Kept so two configurations can be compared query by query. Comparing the
+    # two intervals instead throws away the pairing and calls real differences
+    # inconclusive.
+    per_query: dict[str, list[float]] = field(default_factory=dict)
 
     def table(self) -> str:
         lines = ["| metric | value | 95% CI |", "|---|---|---|"]
@@ -62,4 +66,5 @@ def evaluate(index: Index, dataset: Dataset, *, depth: int = SEARCH_DEPTH) -> Re
     return RetrievalReport(
         metrics={name: bootstrap(values) for name, values in per_query.items()},
         queries=len(judged),
+        per_query=per_query,
     )

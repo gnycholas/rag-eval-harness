@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 
 from rag_eval.config import Config, load_config
 from rag_eval.data import scifact
+from rag_eval.evals import ablation
 from rag_eval.evals import gate as gating
 from rag_eval.evals.pipeline import run as run_generation
 from rag_eval.evals.runner import evaluate
@@ -16,7 +17,7 @@ from rag_eval.generate.provider import build_provider
 from rag_eval.generate.schema import PROMPT_VERSION
 from rag_eval.index.base import Index
 from rag_eval.index.dense import DEFAULT_MODEL, DenseIndex
-from rag_eval.index.hybrid import DEFAULT_K, HybridIndex
+from rag_eval.index.hybrid import DEFAULT_DEPTH, DEFAULT_K, HybridIndex
 from rag_eval.index.sparse import Bm25Index
 
 log = logging.getLogger("rag_eval")
@@ -106,23 +107,65 @@ def cmd_retrieval(args: argparse.Namespace) -> int:
     return 0
 
 
+DEFAULT_RRF_K = (0, 1, 2, 5, 10, 60)
+DEFAULT_DEPTHS = (10, 20, 50, 100, 200)
+
+
+def cmd_ablation(args: argparse.Namespace) -> int:
+    """Score every configuration over the same queries and print the table."""
+    cfg = load_config()
+    dataset = scifact.load(cfg.paths.dataset, split=args.split)
+    if args.split == "test":
+        log.warning(
+            "the test split is for reporting a configuration that was already chosen; "
+            "choosing one by looking at these numbers is calibrating on the answer"
+        )
+
+    sparse = _sparse(dataset)
+    dense = _dense(dataset, cfg, args.model)
+
+    variants = [
+        ablation.Variant("bm25", lambda: sparse),
+        ablation.Variant("dense", lambda: dense),
+    ]
+    for k in args.rrf_k:
+        variants.append(_hybrid_variant(sparse, dense, k=k, depth=DEFAULT_DEPTH))
+    for depth in args.depth:
+        variants.append(_hybrid_variant(sparse, dense, k=DEFAULT_K, depth=depth))
+
+    # The default k and the default depth appear in both sweeps.
+    unique: dict[str, ablation.Variant] = {v.label: v for v in variants}
+
+    report = ablation.run(dataset, list(unique.values()), split=args.split)
+    print(f"\n### ablation ({args.split}, {report.queries} queries)\n")
+    print(report.table())
+    return 0
+
+
+def _hybrid_variant(sparse: Index, dense: Index, *, k: int, depth: int) -> ablation.Variant:
+    return ablation.Variant(
+        f"hybrid k={k} depth={depth}",
+        lambda: HybridIndex(sparse=sparse, dense=dense, k=k, depth=depth),
+    )
+
+
 def cmd_generation(args: argparse.Namespace) -> int:
     cfg = load_config()
     dataset = scifact.load(cfg.paths.dataset, split=args.split)
     provider = build_provider(cfg)
 
     queries = len(dataset.with_verdict()) if not args.limit else args.limit
-    calls = queries * (2 if args.judge else 1)
     if provider.name != "stub" and not args.yes:
         log.warning(
-            "about to make %d calls to %s/%s. Re-run with --yes to proceed.",
-            calls,
+            "about to make %d calls to %s/%s%s. Re-run with --yes to proceed.",
+            queries,
             provider.name,
             provider.model,
+            f" and {queries} to {cfg.resolved_judge_model()}" if args.judge else "",
         )
         return 1
 
-    judge = build_provider(cfg) if args.judge else None
+    judge = build_provider(cfg, model=cfg.resolved_judge_model()) if args.judge else None
     report = run_generation(
         build_index("hybrid", dataset, cfg),
         dataset,
@@ -141,9 +184,9 @@ def cmd_generation(args: argparse.Namespace) -> int:
     print(f"failures   {report.failures}")
     print(f"\n{agreement.confusion_table()}")
 
-    if report.judge_agreement:
+    if report.judge_agreement and judge is not None:
         judged = report.judge_agreement
-        print("\n### the judge, measured against the same human labels\n")
+        print(f"\n### the judge ({judge.model}), measured against the same human labels\n")
         print(f"accuracy   {judged.accuracy}")
         print(f"kappa      {judged.kappa:.4f} ({judged.kappa_reading})")
         print("\nJudge scores are only worth what this agreement is worth.")
@@ -228,6 +271,12 @@ def build_parser() -> argparse.ArgumentParser:
     generation.add_argument("--limit", type=int, help="stop after this many queries")
     generation.add_argument("--yes", action="store_true", help="skip the cost confirmation")
 
+    ablate = sub.add_parser("ablation", help="compare configurations on the training split")
+    ablate.add_argument("--split", default="train", choices=("train", "test"))
+    ablate.add_argument("--model", help="embedding model, defaults to the fast one")
+    ablate.add_argument("--rrf-k", type=int, nargs="+", default=list(DEFAULT_RRF_K))
+    ablate.add_argument("--depth", type=int, nargs="+", default=list(DEFAULT_DEPTHS))
+
     baseline = sub.add_parser("baseline", help="record the current numbers as the baseline")
     baseline.add_argument("--config", default="hybrid", choices=CONFIGURATIONS)
     baseline.add_argument("--model", help="embedding model, defaults to the fast one")
@@ -243,6 +292,7 @@ def main(argv: list[str] | None = None) -> int:
     handlers = {
         "data": cmd_data,
         "retrieval": cmd_retrieval,
+        "ablation": cmd_ablation,
         "generation": cmd_generation,
         "baseline": cmd_baseline,
         "gate": cmd_gate,
