@@ -103,7 +103,48 @@ depth barely matters: everything from 50 to 200 is within noise of the best row.
 
 ## Verdict accuracy, and the judge that scored it
 
-<!-- GENERATION -->
+The verifier is `gemini-3.1-flash-lite`, over the 188 test claims that carry a
+human verdict. It sees only the five retrieved passages.
+
+| metric | value | 95% CI |
+|---|---|---|
+| accuracy | 0.8511 | [0.8031, 0.8989] |
+| Cohen's kappa | 0.7074 | substantial |
+| macro F1 | 0.5911 | |
+| faithful citations | 1.0000 | |
+
+| human \ predicted | CONTRADICT | NOINFO | SUPPORT |
+|---|---|---|---|
+| CONTRADICT | 53 | 9 | 2 |
+| NOINFO | 0 | 0 | 0 |
+| SUPPORT | 7 | 10 | 107 |
+
+Kappa rather than accuracy alone, because SUPPORT outnumbers CONTRADICT close
+to two to one here and a model that answered SUPPORT every time would score
+well on accuracy and zero on kappa.
+
+The macro F1 is low for a reason worth stating. The labelled claims are all
+SUPPORT or CONTRADICT, so the NOINFO row is empty, and the nineteen times the
+model hedged to NOINFO are all misses. Averaging F1 over a class that has no
+examples pulls the number down without saying anything about the model.
+
+Of the 28 wrong answers, 7 are cases where retrieval never surfaced a relevant
+abstract and 21 are cases where it did. That split is the difference between
+investing in retrieval and investing in the prompt. Every citation the model
+produced pointed at a passage it was actually given.
+
+The judge is `gemini-3.5-flash-lite`, a different model answering the same 188
+claims independently.
+
+| judge | value | 95% CI |
+|---|---|---|
+| accuracy against the human labels | 0.8085 | [0.7553, 0.8670] |
+| Cohen's kappa | 0.6402 | substantial |
+
+The judge agrees with the human annotators less often than the model it is
+grading. That is the point of measuring it: a score from this judge is worth
+what that agreement is worth, and quoting its verdicts without it would be an
+opinion with decimal places.
 
 ## The gate
 
@@ -135,7 +176,23 @@ on that many judgments rather than on the full 300.
 
 ## Cost
 
-<!-- COST -->
+One full pass over the labelled claims is 376 calls, 188 to the verifier and
+188 to the judge. It moved 661,502 input tokens and 23,328 output tokens, and
+took 29 minutes.
+
+On the Gemini free tier that is zero dollars and the cost is the quota
+instead. The allowance is per model and per minute, 15 for the verifier, so
+the client paces itself to that rather than earning a retry delay of most of a
+minute. The allowance is not published, and it is not uniform:
+`gemini-3-flash-preview` turned out to allow twenty requests a day, which is a
+thing you learn 80 percent of the way through a pass.
+
+The Anthropic path is implemented and has not been run, so no dollar figure
+for it is published here. The token counts above are what a reader would
+multiply by their own rate.
+
+Building the dense index is the other cost, about 50 minutes of CPU once,
+cached on disk afterwards.
 
 ## Decisions
 
