@@ -129,6 +129,9 @@ The verifier and the judge run on different models by default. A model asked to
 grade its own answer rates it generously, and an agreement figure produced that
 way measures a preference rather than a capability.
 
-On a free tier it also happens to be faster, since the quota is counted per
-model and the two calls per claim then never wait on each other, but that is a
-side effect and not the reason.
+Which second model is not a free choice on this tier. The quota is per model and
+it is not published: gemini-3-flash-preview turned out to allow twenty requests
+a day, which a run of 188 claims discovers about eighty percent of the way
+through. The judge runs on Gemma, which took a burst of twenty two without
+complaint, and the agreement figure that follows says what that choice was
+worth.
