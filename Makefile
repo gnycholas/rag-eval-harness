@@ -37,6 +37,9 @@ data: $(VENV) ## Download and verify the SciFact dataset
 retrieval: $(VENV) ## Score the indexes against the human judgments
 	$(PY) -m rag_eval.cli retrieval
 
+ablation: $(VENV) ## Compare configurations on the training split
+	$(PY) -m rag_eval.cli ablation
+
 generation: $(VENV) ## Verify claims and score against the human labels
 	$(PY) -m rag_eval.cli generation --judge
 
@@ -47,4 +50,4 @@ clean: ## Remove build and cache artifacts
 	rm -rf $(VENV) .mypy_cache .pytest_cache .ruff_cache
 	find . -name __pycache__ -type d -prune -exec rm -rf {} +
 
-.PHONY: help install lint format typecheck test check data retrieval generation gate clean
+.PHONY: help install lint format typecheck test check data retrieval ablation generation gate clean
