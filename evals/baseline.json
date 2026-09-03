@@ -1,0 +1,21 @@
+{
+  "generation": {},
+  "generation_stddev": {},
+  "model": "stub",
+  "prompt_version": "v1",
+  "provider": "stub",
+  "recorded_at": "2026-09-02",
+  "retrieval": {
+    "mrr@10": 0.644807,
+    "ndcg@10": 0.693686,
+    "recall@1": 0.514278,
+    "recall@10": 0.850333,
+    "recall@20": 0.883333,
+    "recall@5": 0.768556
+  },
+  "retrieval_config": {
+    "embedding_model": "sentence-transformers/all-MiniLM-L6-v2",
+    "index": "hybrid",
+    "rrf_k": "1"
+  }
+}

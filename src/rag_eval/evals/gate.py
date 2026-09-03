@@ -19,6 +19,11 @@ BASELINE_PATH = Path("evals/baseline.json")
 # Retrieval involves no model. A drop is a change, not variance.
 RETRIEVAL_TOLERANCE = 0.0
 
+# The baseline file stores rounded numbers. Comparing a full precision run
+# against them makes a rerun of the very same configuration fail by 1e-9, which
+# is how a zero tolerance gate ends up being switched off by whoever hits it.
+PRECISION = 6
+
 
 class GateError(RuntimeError):
     """A metric fell below the baseline."""
@@ -32,6 +37,9 @@ class Baseline:
     model: str
     prompt_version: str
     recorded_at: str
+    # Retrieval involves no language model, so what pins those numbers is the
+    # embedding model and the fusion constant, not the provider.
+    retrieval_config: dict[str, str] = field(default_factory=dict)
     # Standard deviation across repeated runs. Absent until it has been
     # measured, and generation does not gate while it is absent.
     generation_stddev: dict[str, float] = field(default_factory=dict)
@@ -49,12 +57,14 @@ class Baseline:
             prompt_version=payload.get("prompt_version", ""),
             recorded_at=payload.get("recorded_at", ""),
             generation_stddev=payload.get("generation_stddev", {}),
+            retrieval_config=payload.get("retrieval_config", {}),
         )
 
     def save(self, path: Path = BASELINE_PATH) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         payload = {
             "retrieval": self.retrieval,
+            "retrieval_config": self.retrieval_config,
             "generation": self.generation,
             "generation_stddev": self.generation_stddev,
             "provider": self.provider,
@@ -85,6 +95,10 @@ class Finding:
         )
 
 
+def _describe(config: dict[str, str]) -> str:
+    return ", ".join(f"{key}={value}" for key, value in sorted(config.items()))
+
+
 def check(
     baseline: Baseline,
     retrieval: dict[str, float],
@@ -92,6 +106,7 @@ def check(
     *,
     provider: str,
     model: str,
+    retrieval_config: dict[str, str] | None = None,
 ) -> list[Finding]:
     """Compare a run, refusing to compare across configurations.
 
@@ -105,10 +120,19 @@ def check(
             f"{provider}/{model}; these are different configurations, not a regression"
         )
 
+    observed_config = retrieval_config or {}
+    # Baselines recorded before this field existed carry no config, and there is
+    # nothing to compare them against.
+    if retrieval and baseline.retrieval_config and observed_config != baseline.retrieval_config:
+        raise GateError(
+            f"baseline was recorded on {_describe(baseline.retrieval_config)} and this run is "
+            f"{_describe(observed_config)}; these are different configurations, not a regression"
+        )
+
     findings = []
     for metric, recorded in baseline.retrieval.items():
         if metric in retrieval:
-            observed = retrieval[metric]
+            observed = round(retrieval[metric], PRECISION)
             findings.append(
                 Finding(
                     metric=metric,
@@ -123,7 +147,7 @@ def check(
         if metric not in generation:
             continue
         stddev = baseline.generation_stddev.get(metric)
-        observed = generation[metric]
+        observed = round(generation[metric], PRECISION)
         if stddev is None:
             # Variance has not been measured, so there is no honest band. Report
             # and let it through rather than block on a guess.

@@ -16,7 +16,7 @@ from rag_eval.generate.provider import build_provider
 from rag_eval.generate.schema import PROMPT_VERSION
 from rag_eval.index.base import Index
 from rag_eval.index.dense import DEFAULT_MODEL, DenseIndex
-from rag_eval.index.hybrid import HybridIndex
+from rag_eval.index.hybrid import DEFAULT_K, HybridIndex
 from rag_eval.index.sparse import Bm25Index
 
 log = logging.getLogger("rag_eval")
@@ -85,6 +85,16 @@ def build_index(
     raise ValueError(f"unknown configuration: {name!r}")
 
 
+def retrieval_config(name: str, model: str | None) -> dict[str, str]:
+    """What pins a retrieval number: the index, the embeddings and the fusion
+    constant. No language model is involved."""
+    return {
+        "index": name,
+        "embedding_model": model or DEFAULT_MODEL,
+        "rrf_k": str(DEFAULT_K),
+    }
+
+
 def cmd_retrieval(args: argparse.Namespace) -> int:
     cfg = load_config()
     dataset = scifact.load(cfg.paths.dataset, split=args.split)
@@ -150,11 +160,22 @@ def cmd_gate(args: argparse.Namespace) -> int:
 
     cfg = load_config()
     dataset = scifact.load(cfg.paths.dataset, split="test")
-    report = evaluate(build_index("hybrid", dataset, cfg), dataset)
+
+    # Rebuild what the baseline was recorded on. Scoring hybrid against a
+    # baseline recorded on bm25 would read as a huge gain and mean nothing.
+    recorded = baseline.retrieval_config
+    index_name = recorded.get("index", "hybrid")
+    model = recorded.get("embedding_model") or None
+    report = evaluate(build_index(index_name, dataset, cfg, model), dataset)
     retrieval = {name: value.mean for name, value in report.metrics.items()}
 
     findings = gating.check(
-        baseline, retrieval, {}, provider=cfg.provider, model=cfg.resolved_model()
+        baseline,
+        retrieval,
+        {},
+        provider=cfg.provider,
+        model=cfg.resolved_model(),
+        retrieval_config=retrieval_config(index_name, model),
     )
     for finding in findings:
         log.info("%s", finding)
@@ -167,11 +188,12 @@ def cmd_baseline(args: argparse.Namespace) -> int:
     """Record the current numbers as the line the gate compares against."""
     cfg = load_config()
     dataset = scifact.load(cfg.paths.dataset, split="test")
-    report = evaluate(build_index(args.config, dataset, cfg), dataset)
+    report = evaluate(build_index(args.config, dataset, cfg, args.model), dataset)
 
     existing = gating.Baseline.load()
     baseline = gating.Baseline(
         retrieval={name: round(value.mean, 6) for name, value in report.metrics.items()},
+        retrieval_config=retrieval_config(args.config, args.model),
         generation=existing.generation if existing else {},
         generation_stddev=existing.generation_stddev if existing else {},
         provider=cfg.provider,
@@ -208,6 +230,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     baseline = sub.add_parser("baseline", help="record the current numbers as the baseline")
     baseline.add_argument("--config", default="hybrid", choices=CONFIGURATIONS)
+    baseline.add_argument("--model", help="embedding model, defaults to the fast one")
 
     sub.add_parser("gate", help="compare a run against the recorded baseline")
 

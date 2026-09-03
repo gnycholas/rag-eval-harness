@@ -110,3 +110,59 @@ def test_a_missing_baseline_is_none(tmp_path: Path) -> None:
 
 def test_metrics_absent_from_the_run_are_skipped() -> None:
     assert run(baseline(), {}) == []
+
+
+MINILM = {"index": "hybrid", "embedding_model": "all-MiniLM-L6-v2", "rrf_k": "1"}
+
+
+def test_another_embedding_model_is_refused() -> None:
+    base = baseline(retrieval_config=MINILM)
+    with pytest.raises(GateError, match="different configurations"):
+        check(
+            base,
+            {"ndcg@10": 0.71},
+            {},
+            provider=base.provider,
+            model=base.model,
+            retrieval_config=MINILM | {"embedding_model": "bge-small-en-v1.5"},
+        )
+
+
+def test_another_fusion_constant_is_refused() -> None:
+    base = baseline(retrieval_config=MINILM)
+    with pytest.raises(GateError, match="rrf_k"):
+        check(
+            base,
+            {"ndcg@10": 0.71},
+            {},
+            provider=base.provider,
+            model=base.model,
+            retrieval_config=MINILM | {"rrf_k": "60"},
+        )
+
+
+def test_the_same_configuration_compares() -> None:
+    base = baseline(retrieval_config=MINILM)
+    findings = check(
+        base,
+        {"ndcg@10": 0.71},
+        {},
+        provider=base.provider,
+        model=base.model,
+        retrieval_config=dict(MINILM),
+    )
+    assert [f.blocking for f in findings] == [False]
+
+
+def test_a_baseline_recorded_before_the_field_still_compares() -> None:
+    # Nothing to compare against, so it falls back to the old behaviour instead
+    # of refusing every older baseline.
+    assert run(baseline(), {"ndcg@10": 0.71}) != []
+
+
+def test_rerunning_the_same_configuration_does_not_block() -> None:
+    # The baseline file is rounded, the run is not. A difference of 1e-9 is the
+    # file format, not a regression.
+    base = baseline(retrieval={"ndcg@10": 0.693686})
+    findings = run(base, {"ndcg@10": 0.6936859999999999})
+    assert not findings[0].blocking

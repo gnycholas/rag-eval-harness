@@ -44,6 +44,8 @@ class Config:
     def resolved_model(self) -> str:
         if self.model:
             return self.model
+        if self.provider == STUB:
+            return STUB
         return DEFAULT_OLLAMA_MODEL if self.provider == OLLAMA else DEFAULT_ANTHROPIC_MODEL
 
 
