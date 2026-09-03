@@ -12,6 +12,8 @@ from rag_eval.config import Config, load_config
 from rag_eval.data import scifact
 from rag_eval.evals import ablation
 from rag_eval.evals import gate as gating
+from rag_eval.evals import runs as run_store
+from rag_eval.evals.pipeline import GenerationReport
 from rag_eval.evals.pipeline import run as run_generation
 from rag_eval.evals.runner import evaluate
 from rag_eval.generate.provider import build_provider
@@ -176,6 +178,9 @@ def cmd_generation(args: argparse.Namespace) -> int:
         limit=args.limit,
     )
 
+    if provider.name != "stub":
+        record_run(report, queries)
+
     agreement = report.model_agreement
     print(f"\n### verdict against human labels ({provider.name}/{provider.model})\n")
     print(f"accuracy   {agreement.accuracy}  n={agreement.accuracy.n}")
@@ -261,35 +266,61 @@ def cmd_baseline(args: argparse.Namespace) -> int:
     return 0
 
 
+def record_run(report: GenerationReport, claims: int) -> None:
+    run_store.append(
+        run_store.Run(
+            provider=report.provider,
+            model=report.model,
+            prompt_version=PROMPT_VERSION,
+            claims=claims,
+            scored=report.model_agreement.accuracy.n,
+            accuracy=report.model_agreement.accuracy.mean,
+            faithful_citations=report.faithful_rate,
+        )
+    )
+
+
 def _measure_generation(
     cfg: Config, dataset: scifact.Dataset, args: argparse.Namespace
 ) -> tuple[dict[str, float], dict[str, float]]:
-    """Run the generation eval repeatedly and keep the spread.
+    """Average the recorded runs, and add more first if asked to.
 
     One run gives a number with no idea how much of it is the model and how
-    much is the sampling. The gate needs the spread more than it needs the
-    number: without it there is no honest band and generation cannot block.
+    much is the sampling. The gate needs that spread more than it needs the
+    number, and a spread computed inside a single process cannot survive the
+    quota running out halfway, so the runs are accumulated on disk and the
+    average is taken over every one that matches this configuration.
     """
-    provider = build_provider(cfg)
-    index = build_index("hybrid", dataset, cfg)
+    claims = args.limit or len(dataset.with_verdict())
+    if args.repeat:
+        provider = build_provider(cfg)
+        index = build_index("hybrid", dataset, cfg)
+        for attempt in range(1, args.repeat + 1):
+            report = run_generation(index, dataset, provider, top_k=args.top_k, limit=args.limit)
+            record_run(report, claims)
+            log.info(
+                "run %d/%d: accuracy %.4f, faithful %.4f",
+                attempt,
+                args.repeat,
+                report.model_agreement.accuracy.mean,
+                report.faithful_rate,
+            )
 
-    runs: dict[str, list[float]] = {"accuracy": [], "faithful_citations": []}
-    for attempt in range(1, args.repeat + 1):
-        report = run_generation(index, dataset, provider, top_k=args.top_k, limit=args.limit)
-        runs["accuracy"].append(report.model_agreement.accuracy.mean)
-        runs["faithful_citations"].append(report.faithful_rate)
-        log.info(
-            "run %d/%d: accuracy %.4f, faithful %.4f",
-            attempt,
-            args.repeat,
-            runs["accuracy"][-1],
-            runs["faithful_citations"][-1],
-        )
+    key = (cfg.provider, cfg.resolved_model(), PROMPT_VERSION, claims)
+    recorded = run_store.matching(run_store.load(), key)
+    if not recorded:
+        raise SystemExit(f"no recorded runs for {key}; run with --repeat to make some")
 
-    means = {name: round(mean(values), 6) for name, values in runs.items()}
-    if args.repeat < 2:
+    values = {
+        "accuracy": [run.accuracy for run in recorded],
+        "faithful_citations": [run.faithful_citations for run in recorded],
+    }
+    log.info("averaging %d recorded runs over %d claims", len(recorded), claims)
+
+    means = {name: round(mean(numbers), 6) for name, numbers in values.items()}
+    if len(recorded) < 2:
         return means, {}
-    return means, {name: round(stdev(values), 6) for name, values in runs.items()}
+    return means, {name: round(stdev(numbers), 6) for name, numbers in values.items()}
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -324,7 +355,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--generation", action="store_true", help="also measure the generation metrics"
     )
     baseline.add_argument(
-        "--repeat", type=int, default=5, help="runs to average, and to take the spread from"
+        "--repeat", type=int, default=0, help="runs to add before averaging what is recorded"
     )
     baseline.add_argument("--top-k", type=int, default=5)
     baseline.add_argument("--limit", type=int, help="claims per run, for a cheaper measurement")
