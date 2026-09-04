@@ -95,11 +95,21 @@ there is no temperature to pin at zero and two identical runs disagree. A
 tolerance band picked by feel fails on noise, everyone learns to rerun until it
 passes, and from then on the gate protects nothing. So generation reports
 without blocking until the run to run variance has actually been measured, and
-the band comes from that measurement.
+the band comes from that measurement. Five runs of the same configuration over
+the same 188 claims moved by exactly one claim and never more, a standard
+deviation of 0.002913, so the band of two standard deviations lets a one claim
+drop through and blocks two.
+
+Measuring the spread is only half of it. The rule has to actually receive the
+generation numbers, and a rule that is unit tested while the command feeds it an
+empty dict passes every test and gates nothing. The tests covering that path
+drive the command rather than the rule.
 
 The gate also refuses to compare a run against a baseline recorded on a
-different model. Running something cheap day to day and measuring it against an
-expensive baseline is the most tempting way to get a wrong answer here.
+different model, or over a different number of claims. Running something cheap
+day to day and measuring it against an expensive baseline is the most tempting
+way to get a wrong answer here, and accuracy over twenty claims is not a lower
+reading of accuracy over 188.
 
 ## Four providers behind one interface
 
@@ -132,6 +142,7 @@ way measures a preference rather than a capability.
 Which second model is not a free choice on this tier. The quota is per model and
 it is not published: gemini-3-flash-preview turned out to allow twenty requests
 a day, which a run of 188 claims discovers about eighty percent of the way
-through. The judge runs on Gemma, which took a burst of twenty two without
-complaint, and the agreement figure that follows says what that choice was
-worth.
+through. Gemma had the allowance for the volume but ignored the response schema
+often enough to spend the quota on answers that could not be scored. The judge
+runs on gemini-3.5-flash-lite, and the agreement figure that follows says what
+that choice was worth.
