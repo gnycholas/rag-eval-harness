@@ -1,3 +1,5 @@
 {"accuracy": 0.851063829787234, "claims": 188, "faithful_citations": 1.0, "model": "gemini-3.1-flash-lite", "prompt_version": "v1", "provider": "google", "recorded_at": "2026-09-03T01:51:27+00:00", "scored": 188}
 {"accuracy": 0.851063829787234, "claims": 188, "faithful_citations": 1.0, "model": "gemini-3.1-flash-lite", "prompt_version": "v1", "provider": "google", "recorded_at": "2026-09-03T21:28:52+00:00", "scored": 188}
 {"accuracy": 0.8563829787234043, "claims": 188, "faithful_citations": 1.0, "model": "gemini-3.1-flash-lite", "prompt_version": "v1", "provider": "google", "recorded_at": "2026-09-03T22:17:51+00:00", "scored": 188}
+{"accuracy": 0.8563829787234043, "claims": 188, "faithful_citations": 1.0, "model": "gemini-3.1-flash-lite", "prompt_version": "v1", "provider": "google", "recorded_at": "2026-09-04T20:53:00+00:00", "scored": 188}
+{"accuracy": 0.851063829787234, "claims": 188, "faithful_citations": 1.0, "model": "gemini-3.1-flash-lite", "prompt_version": "v1", "provider": "google", "recorded_at": "2026-09-04T21:09:06+00:00", "scored": 188}
