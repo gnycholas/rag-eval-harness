@@ -1,5 +1,7 @@
 # rag-eval-harness
 
+[![CI](https://github.com/gnycholas/rag-eval-harness/actions/workflows/ci.yml/badge.svg)](https://github.com/gnycholas/rag-eval-harness/actions/workflows/ci.yml)
+
 Retrieval and claim verification over SciFact, where the deliverable is the
 evaluation rather than the pipeline. Every number here is scored against human
 annotations, carries a confidence interval, and says when a difference has not
