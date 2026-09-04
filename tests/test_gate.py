@@ -166,3 +166,44 @@ def test_rerunning_the_same_configuration_does_not_block() -> None:
     base = baseline(retrieval={"ndcg@10": 0.693686})
     findings = run(base, {"ndcg@10": 0.6936859999999999})
     assert not findings[0].blocking
+
+
+def test_a_cheaper_generation_run_is_refused() -> None:
+    """Accuracy over 20 claims is not a lower reading of accuracy over 188."""
+    base = baseline(generation_claims=188)
+    with pytest.raises(GateError, match="different measurements"):
+        check(
+            base,
+            {},
+            {"accuracy": 0.80},
+            provider=base.provider,
+            model=base.model,
+            generation_claims=20,
+        )
+
+
+def test_the_same_claim_count_compares() -> None:
+    base = baseline(generation_claims=188)
+    findings = check(
+        base,
+        {},
+        {"accuracy": 0.80},
+        provider=base.provider,
+        model=base.model,
+        generation_claims=188,
+    )
+    assert [f.metric for f in findings] == ["accuracy"]
+
+
+def test_a_baseline_without_a_recorded_claim_count_still_compares() -> None:
+    # Older baselines carry no count, and refusing every one of them would make
+    # the guard a migration problem rather than a check.
+    base = baseline()
+    assert check(
+        base,
+        {},
+        {"accuracy": 0.80},
+        provider=base.provider,
+        model=base.model,
+        generation_claims=20,
+    )

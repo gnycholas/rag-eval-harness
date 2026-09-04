@@ -43,6 +43,9 @@ class Baseline:
     # Standard deviation across repeated runs. Absent until it has been
     # measured, and generation does not gate while it is absent.
     generation_stddev: dict[str, float] = field(default_factory=dict)
+    # How many claims each of those runs covered. Accuracy over a cheap subset
+    # is not a lower reading of the same measurement, it is a different one.
+    generation_claims: int = 0
 
     @classmethod
     def load(cls, path: Path = BASELINE_PATH) -> Baseline | None:
@@ -57,6 +60,7 @@ class Baseline:
             prompt_version=payload.get("prompt_version", ""),
             recorded_at=payload.get("recorded_at", ""),
             generation_stddev=payload.get("generation_stddev", {}),
+            generation_claims=payload.get("generation_claims", 0),
             retrieval_config=payload.get("retrieval_config", {}),
         )
 
@@ -67,6 +71,7 @@ class Baseline:
             "retrieval_config": self.retrieval_config,
             "generation": self.generation,
             "generation_stddev": self.generation_stddev,
+            "generation_claims": self.generation_claims,
             "provider": self.provider,
             "model": self.model,
             "prompt_version": self.prompt_version,
@@ -99,6 +104,19 @@ def _describe(config: dict[str, str]) -> str:
     return ", ".join(f"{key}={value}" for key, value in sorted(config.items()))
 
 
+def refuse_mismatched_claims(baseline: Baseline, claims: int) -> None:
+    """A run over fewer claims is a different measurement, not a cheaper one.
+
+    Raised before the calls are spent as well as inside check(), because
+    discovering it after 188 requests is a lesson in the wrong place.
+    """
+    if baseline.generation_claims and claims and claims != baseline.generation_claims:
+        raise GateError(
+            f"baseline generation was measured over {baseline.generation_claims} claims and this "
+            f"run covers {claims}; these are different measurements, not a regression"
+        )
+
+
 def check(
     baseline: Baseline,
     retrieval: dict[str, float],
@@ -107,6 +125,7 @@ def check(
     provider: str,
     model: str,
     retrieval_config: dict[str, str] | None = None,
+    generation_claims: int = 0,
 ) -> list[Finding]:
     """Compare a run, refusing to compare across configurations.
 
@@ -119,6 +138,8 @@ def check(
             f"baseline was recorded on {baseline.provider}/{baseline.model} and this run is "
             f"{provider}/{model}; these are different configurations, not a regression"
         )
+    if generation:
+        refuse_mismatched_claims(baseline, generation_claims)
 
     observed_config = retrieval_config or {}
     # Baselines recorded before this field existed carry no config, and there is

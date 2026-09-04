@@ -219,19 +219,56 @@ def cmd_gate(args: argparse.Namespace) -> int:
     report = evaluate(build_index(index_name, dataset, cfg, model), dataset)
     retrieval = {name: value.mean for name, value in report.metrics.items()}
 
+    claims = args.limit or len(dataset.with_verdict()) if args.generation else 0
+    generation = _gate_generation(cfg, dataset, args) if args.generation else {}
+
     findings = gating.check(
         baseline,
         retrieval,
-        {},
+        generation,
         provider=cfg.provider,
         model=cfg.resolved_model(),
         retrieval_config=retrieval_config(index_name, model),
+        generation_claims=claims,
     )
     for finding in findings:
         log.info("%s", finding)
     gating.enforce(findings)
     log.info("no regression against the baseline of %s", baseline.recorded_at)
     return 0
+
+
+def _gate_generation(
+    cfg: Config, dataset: scifact.Dataset, args: argparse.Namespace
+) -> dict[str, float]:
+    """One run of the generation half, for the gate to compare.
+
+    Retrieval is free to rescore, generation costs a call per claim, so it is
+    opt in and the default gate stays offline. The run is not appended to
+    evals/runs.jsonl: those runs are the sample the baseline band was measured
+    from, and a gate run is by definition made after a change, so folding it in
+    would widen the band using the very thing the band is there to catch.
+    """
+    claims = args.limit or len(dataset.with_verdict())
+    baseline = gating.Baseline.load()
+    if baseline is not None:
+        gating.refuse_mismatched_claims(baseline, claims)
+
+    provider = build_provider(cfg)
+    if provider.name != "stub" and not args.yes:
+        raise SystemExit(
+            f"gating generation is {claims} calls to {provider.name}/{provider.model}; "
+            "re-run with --yes to proceed"
+        )
+
+    report = run_generation(
+        build_index("hybrid", dataset, cfg), dataset, provider, top_k=args.top_k, limit=args.limit
+    )
+    log.info("generation run over %d claims", report.model_agreement.accuracy.n)
+    return {
+        "accuracy": report.model_agreement.accuracy.mean,
+        "faithful_citations": report.faithful_rate,
+    }
 
 
 def cmd_baseline(args: argparse.Namespace) -> int:
@@ -242,8 +279,10 @@ def cmd_baseline(args: argparse.Namespace) -> int:
 
     generation = existing.generation if existing else {}
     generation_stddev = existing.generation_stddev if existing else {}
+    generation_claims = existing.generation_claims if existing else 0
     if args.generation:
         generation, generation_stddev = _measure_generation(cfg, dataset, args)
+        generation_claims = args.limit or len(dataset.with_verdict())
 
     report = evaluate(build_index(args.config, dataset, cfg, args.model), dataset)
     baseline = gating.Baseline(
@@ -251,6 +290,7 @@ def cmd_baseline(args: argparse.Namespace) -> int:
         retrieval_config=retrieval_config(args.config, args.model),
         generation=generation,
         generation_stddev=generation_stddev,
+        generation_claims=generation_claims,
         provider=cfg.provider,
         model=cfg.resolved_model(),
         prompt_version=PROMPT_VERSION,
@@ -360,7 +400,13 @@ def build_parser() -> argparse.ArgumentParser:
     baseline.add_argument("--top-k", type=int, default=5)
     baseline.add_argument("--limit", type=int, help="claims per run, for a cheaper measurement")
 
-    sub.add_parser("gate", help="compare a run against the recorded baseline")
+    gate = sub.add_parser("gate", help="compare a run against the recorded baseline")
+    gate.add_argument(
+        "--generation", action="store_true", help="also run and compare the generation metrics"
+    )
+    gate.add_argument("--top-k", type=int, default=5)
+    gate.add_argument("--limit", type=int, help="stop after this many claims")
+    gate.add_argument("--yes", action="store_true", help="skip the cost confirmation")
 
     return parser
 
@@ -376,7 +422,14 @@ def main(argv: list[str] | None = None) -> int:
         "baseline": cmd_baseline,
         "gate": cmd_gate,
     }
-    return handlers[args.command](args)
+    try:
+        return handlers[args.command](args)
+    except gating.GateError as refused:
+        # A failing gate is a result, not a crash. The exit code is what CI
+        # reads and the message is what a person reads; a traceback serves
+        # neither.
+        log.error("%s", refused)
+        return 1
 
 
 if __name__ == "__main__":

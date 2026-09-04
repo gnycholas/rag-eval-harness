@@ -43,11 +43,14 @@ ablation: $(VENV) ## Compare configurations on the training split
 generation: $(VENV) ## Verify claims and score against the human labels
 	$(PY) -m rag_eval.cli generation --judge
 
-gate: $(VENV) ## Compare against the recorded baseline
+gate: $(VENV) ## Compare retrieval against the recorded baseline
 	$(PY) -m rag_eval.cli gate
+
+gate-generation: $(VENV) ## Also compare generation, at one call per claim
+	$(PY) -m rag_eval.cli gate --generation --yes
 
 clean: ## Remove build and cache artifacts
 	rm -rf $(VENV) .mypy_cache .pytest_cache .ruff_cache
 	find . -name __pycache__ -type d -prune -exec rm -rf {} +
 
-.PHONY: help install lint format typecheck test check data retrieval ablation generation gate clean
+.PHONY: help install lint format typecheck test check data retrieval ablation generation gate gate-generation clean
