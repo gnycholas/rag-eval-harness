@@ -238,9 +238,12 @@ Five repeated runs need 940 requests against a daily 500, which is why the
 runs behind the variance figure are accumulated across days rather than
 computed in one pass.
 
-The Anthropic path is implemented and has not been run, so no dollar figure
-for it is published here. The token counts above are what a reader would
-multiply by their own rate.
+The Anthropic path is implemented and has not been run, so there is no measured
+bill for it. At the list price for claude-opus-5, five dollars per million input
+tokens and twenty five per million output, the counts above come to roughly four
+dollars for one pass. That figure is arithmetic rather than a measurement, and
+it carries two caveats worth more than the number: the token counts were
+produced by a different tokenizer, and list prices move.
 
 Building the dense index is the other cost, about 50 minutes of CPU once,
 cached on disk afterwards.
