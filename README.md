@@ -17,8 +17,9 @@ make retrieval
 
 That much needs no API key and no account. It downloads the dataset, checks it
 against a recorded hash, builds both indexes and scores them against the human
-relevance judgments. The dense index takes about fifty minutes to build on CPU
-the first time and is cached afterwards.
+relevance judgments. Following those three commands into an empty directory
+takes about two minutes end to end on a six core laptop CPU, and the dense
+vectors are cached on disk after the first build.
 
 Verifying claims needs a model. `RAG_PROVIDER=ollama` runs it locally for free,
 `RAG_PROVIDER=google` or `RAG_PROVIDER=anthropic` runs it against an API, and
@@ -247,8 +248,11 @@ dollars for one pass. That figure is arithmetic rather than a measurement, and
 it carries two caveats worth more than the number: the token counts were
 produced by a different tokenizer, and list prices move.
 
-Building the dense index is the other cost, about 50 minutes of CPU once,
-cached on disk afterwards.
+Building the dense index is the other cost, and it is smaller than it sounds.
+Embedding the 5,183 abstracts and scoring the 300 test queries took 101 seconds
+on an idle 11th generation six core i5, once, with the vectors cached on disk
+afterwards. Timings taken while something else is using the machine are worth
+nothing: the same build measured under load read as most of an hour.
 
 ## Decisions
 
