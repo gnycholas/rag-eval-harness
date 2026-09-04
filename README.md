@@ -158,10 +158,48 @@ compare a run built on anything else.
 
 Generation is not deterministic. Sampling controls were removed from the
 current models, so two identical runs disagree and a tolerance picked by feel
-fails on noise. The band comes from repeated runs instead, and until that
-measurement exists generation reports without blocking.
+fails on noise. So the band comes from repeated runs, and generation only
+reports without blocking while that measurement is missing.
 
-<!-- VARIANCE -->
+That band now exists. The same configuration was run five times over the same
+188 claims, spread across separate days because the daily allowance does not fit
+five runs in one.
+
+| run | accuracy | claims correct |
+|---|---|---|
+| 1 | 0.851064 | 160 |
+| 2 | 0.851064 | 160 |
+| 3 | 0.856383 | 161 |
+| 4 | 0.856383 | 161 |
+| 5 | 0.851064 | 160 |
+
+The mean is 0.853191 and the standard deviation is 0.002913, which is 0.55 of a
+single claim. Across five runs the answer moved by exactly one claim and never
+more. The band is two standard deviations, 0.005827, so a drop of one claim
+passes as sampling and a drop of two blocks.
+
+Five runs pin that spread loosely, and widening the band for a sample that small
+would give 0.008861 instead. Both numbers sit between one claim and two, so on
+this data the more careful interval blocks and accepts exactly the same runs,
+and the simpler one is what is in the code.
+
+This spread is not the confidence interval next to the accuracy above. The
+interval, roughly plus or minus 0.048, says how much the figure would move on a
+different set of claims. The band says how much it moves on the same claims with
+nothing changed, and only the second one is a question the gate can ask.
+
+Faithful citations came out at 1.0000 in all five runs, so the measured spread
+is zero and the band is zero with it. That is meant: a citation pointing at a
+passage the model was never given is a defect rather than sampling noise.
+
+The gate also refuses a generation run over a different number of claims.
+Accuracy over a cheap subset of twenty is not a lower reading of accuracy over
+188, and comparing them would be the same mistake as comparing across models.
+
+```sh
+make gate             # retrieval only, no key and no calls
+make gate-generation  # adds one call per claim
+```
 
 ## What this dataset cannot measure
 

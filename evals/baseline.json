@@ -1,10 +1,17 @@
 {
-  "generation": {},
-  "generation_stddev": {},
-  "model": "stub",
+  "generation": {
+    "accuracy": 0.853191,
+    "faithful_citations": 1.0
+  },
+  "generation_claims": 188,
+  "generation_stddev": {
+    "accuracy": 0.002913,
+    "faithful_citations": 0.0
+  },
+  "model": "gemini-3.1-flash-lite",
   "prompt_version": "v1",
-  "provider": "stub",
-  "recorded_at": "2026-09-02",
+  "provider": "google",
+  "recorded_at": "2026-09-04",
   "retrieval": {
     "mrr@10": 0.644807,
     "ndcg@10": 0.693686,
